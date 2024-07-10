@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azi's Palette Creator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #fff5f5;
+            color: #4a0e2e;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .header {
+            position: relative;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 80px; /* Increased to accommodate lower image */
+        }
+        h1 {
+            font-family: 'Dancing Script', cursive;
+            font-size: 4em;
+            color: #ff69b4;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 0;
+        }
+        #paletteImage {
+            position: absolute;
+            top: 120%; /* Moved lower */
+            right: 20px;
+            width: 150px;
+            height: auto;
+        }
+        #canvasContainer {
+            position: relative;
+            width: 600px;
+            height: 600px;
+        }
+        #gameCanvas {
+            border: 10px solid #8b4513;
+            border-radius: 50%;
+            box-shadow: 0 0 40px rgba(139, 69, 19, 0.4);
+        }
+        #controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+        }
+        input[type="color"] {
+            width: 80px;
+            height: 80px;
+            border: none;
+            border-radius: 50%;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s;
+            -webkit-appearance: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 50%;
+        }
+        input[type="color"]:hover {
+            transform: scale(1.15);
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.3em;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Quicksand', sans-serif;
+        }
+        #collideBtn {
+            background: linear-gradient(45deg, #ff69b4, #ffa07a);
+            color: #fff;
+        }
+        #cleanBtn {
+            background: linear-gradient(45deg, #20b2aa, #48d1cc);
+            color: #fff;
+        }
+        button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 7px 20px rgba(0,0,0,0.3);
+        }
+        #mixedColorDisplay {
+            margin-top: 30px;
+            font-size: 1.8em;
+            color: #4a0e2e;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Azi's Palette Creator</h1>
+        <img src="/api/placeholder/150/150" alt="Artist Palette" id="paletteImage">
+    </div>
+    <div id="canvasContainer">
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+    </div>
+    <div id="controls">
+        <input type="color" id="color1" value="#ff69b4">
+        <input type="color" id="color2" value="#ffa07a">
+        <button id="collideBtn">Create Colours!</button>
+        <button id="cleanBtn">Reset</button>
+    </div>
+    <div id="mixedColorDisplay"></div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const color1Input = document.getElementById('color1');
+        const color2Input = document.getElementById('color2');
+        const collideBtn = document.getElementById('collideBtn');
+        const cleanBtn = document.getElementById('cleanBtn');
+        const mixedColorDisplay = document.getElementById('mixedColorDisplay');
+
+        let animatedSplatters = [];
+        let staticSplatters = [];
+        let particles = [];
+        let animationId = null;
+        let collisionPoint = null;
+        let collisionTime = 0;
+
+        function drawPalette() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
+            ctx.clip();
+
+            // Draw wood texture
+            const gradient = ctx.createRadialGradient(
+                canvas.width / 2, canvas.height / 2, 0,
+                canvas.width / 2, canvas.height / 2, canvas.width / 2
+            );
+            gradient.addColorStop(0, '#d2691e');
+            gradient.addColorStop(1, '#8b4513');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw color spots
+            const colors = ['#ff69b4', '#ffa07a', '#20b2aa', '#dda0dd', '#f0e68c'];
+            colors.forEach((color, index) => {
+                const angle = (index / colors.length) * Math.PI * 2;
+                const x = canvas.width / 2 + Math.cos(angle) * (canvas.width / 3);
+                const y = canvas.height / 2 + Math.sin(angle) * (canvas.height / 3);
+                ctx.beginPath();
+                ctx.arc(x, y, 30, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
+        function drawParticle(x, y, color, size) {
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = color;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        function createSplatters(x, y, color1, color2) {
+            const mixedColor = mixColors(color1, color2);
+            
+            mixedColorDisplay.textContent = `New Colour: ${mixedColor.toUpperCase()}`;
+            mixedColorDisplay.style.color = mixedColor;
+            
+            for (let i = 0; i < 300; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 20 + 10;
+                const size = Math.random() * 12 + 2;
+                animatedSplatters.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size: size * 0.8,
+                    targetSize: size,
+                    color: Math.random() < 0.7 ? mixedColor : (Math.random() < 0.5 ? color1 : color2),
+                    life: 150 + Math.random() * 100,
+                    appearDelay: Math.random() * 5
+                });
+            }
+            
+            for (let i = 0; i < 100; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * canvas.width / 2;
+                staticSplatters.push({
+                    x: x + Math.cos(angle) * distance,
+                    y: y + Math.sin(angle) * distance,
+                    size: Math.random() * 20 + 5,
+                    color: Math.random() < 0.6 ? mixedColor : (Math.random() < 0.5 ? color1 : color2),
+                    appearDelay: Math.random() * 10
+                });
+            }
+        }
+
+        function mixColors(color1, color2) {
+            const r1 = parseInt(color1.slice(1, 3), 16);
+            const g1 = parseInt(color1.slice(3, 5), 16);
+            const b1 = parseInt(color1.slice(5, 7), 16);
+            const r2 = parseInt(color2.slice(1, 3), 16);
+            const g2 = parseInt(color2.slice(3, 5), 16);
+            const b2 = parseInt(color2.slice(5, 7), 16);
+            
+            const r = Math.round((r1 + r2) / 2);
+            const g = Math.round((g1 + g2) / 2);
+            const b = Math.round((b1 + b2) / 2);
+            
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        function updateAndDrawSplatters(deltaTime) {
+            animatedSplatters = animatedSplatters.filter(splat => splat.life > 0);
+            
+            animatedSplatters.forEach(splat => {
+                if (splat.appearDelay > 0) {
+                    splat.appearDelay -= deltaTime;
+                    return;
+                }
+                
+                splat.x += splat.vx;
+                splat.y += splat.vy;
+                splat.vy += 0.2; // Gravity effect
+                splat.life--;
+
+                splat.size = Math.min(splat.size + deltaTime * 0.5, splat.targetSize);
+
+                ctx.globalAlpha = splat.life / 150;
+                ctx.beginPath();
+                ctx.arc(splat.x, splat.y, splat.size, 0, Math.PI * 2);
+                ctx.fillStyle = splat.color;
+                ctx.fill();
+            });
+            
+            staticSplatters.forEach(splat => {
+                if (splat.appearDelay > 0) {
+                    splat.appearDelay -= deltaTime;
+                    return;
+                }
+                
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath();
+                ctx.arc(splat.x, splat.y, splat.size, 0, Math.PI * 2);
+                ctx.fillStyle = splat.color;
+                ctx.fill();
+            });
+            
+            ctx.globalAlpha = 1;
+        }
+
+        function animateCollision() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            const color1 = color1Input.value;
+            const color2 = color2Input.value;
+            particles = [
+                { x: 50, y: canvas.height / 2, color: color1, speed: 12 },
+                { x: canvas.width - 50, y: canvas.height / 2, color: color2, speed: -12 }
+            ];
+
+            collisionPoint = null;
+            collisionTime = 0;
+            let lastTime = performance.now();
+
+            function animate(currentTime) {
+                const deltaTime = (currentTime - lastTime) / 16; // Normalize to ~60fps
+                lastTime = currentTime;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawPalette();
+
+                if (collisionPoint) {
+                    collisionTime += deltaTime;
+                }
+                updateAndDrawSplatters(deltaTime);
+
+                if (!collisionPoint) {
+                    particles.forEach(particle => {
+                        const size = 10 + Math.sin(Date.now() / 100) * 3;
+                        drawParticle(particle.x, particle.y, particle.color, size);
+                        particle.x += particle.speed * deltaTime;
+
+                        if (!collisionPoint && 
+                            particles[0].x >= canvas.width / 2 - 10 && 
+                            particles[1].x <= canvas.width / 2 + 10) {
+                            collisionPoint = { x: canvas.width / 2, y: canvas.height / 2 };
+                            createSplatters(collisionPoint.x, collisionPoint.y, color1, color2);
+                        }
+                    });
+                }
+
+                animationId = requestAnimationFrame(animate);
+            }
+
+            animate(performance.now());
+        }
+
+        function cleanCanvas() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            animatedSplatters = [];
+            staticSplatters = [];
+            collisionPoint = null;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPalette();
+            mixedColorDisplay.textContent = ''; // Clear the mixed color display
+        }
+
+        collideBtn.addEventListener('click', animateCollision);
+        cleanBtn.addEventListener('click', cleanCanvas);
+
+        // Initial canvas setup
+        cleanCanvas();
+    </script>
+</body>
+</html>
